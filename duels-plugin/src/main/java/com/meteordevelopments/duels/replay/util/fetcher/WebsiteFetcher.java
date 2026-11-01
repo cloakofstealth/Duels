@@ -7,16 +7,17 @@ import java.io.BufferedReader;
 import java.io.InputStreamReader;
 import java.net.HttpURLConnection;
 import java.net.URL;
-import java.util.HashMap;
 import java.util.Map;
 import java.util.Scanner;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 
 
 
 
 
+import com.google.common.cache.CacheBuilder;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.meteordevelopments.duels.replay.util.LogUtils;
@@ -29,8 +30,12 @@ public class WebsiteFetcher {
 	private static Gson gson = new GsonBuilder().create();
 	
 
-	private static Map<String, String> webChache = new HashMap<String, String>();
-	private static Map<String, JsonClass> jsonCache = new HashMap<String, JsonClass>();
+	// Bounded and thread-safe: entries are keyed by player name and written from the async pool
+	private static Map<String, String> webChache = CacheBuilder.newBuilder()
+			.maximumSize(1000)
+			.expireAfterAccess(1, TimeUnit.HOURS)
+			.<String, String>build()
+			.asMap();
 
 	private static ExecutorService pool = Executors.newCachedThreadPool();
 	
@@ -65,9 +70,10 @@ public class WebsiteFetcher {
 	public static JsonClass getJson(String url, boolean cache, JsonData jsonData) {
 		WebsiteFetcher data;
 		try {
-		if(cache && webChache.containsKey(url)) {
-			 data = gson.fromJson(webChache.get(url), WebsiteFetcher.class);
-			 
+		final String cached = cache ? webChache.get(url) : null;
+		if(cached != null) {
+			 data = gson.fromJson(cached, WebsiteFetcher.class);
+
 		}else{
 		
 				HttpURLConnection connection = (HttpURLConnection) new URL(url).openConnection();
@@ -84,7 +90,6 @@ public class WebsiteFetcher {
 		
 					jsonData.setData(data.content);
 					jsonData.convertData();
-					jsonCache.put(url, jsonData.getJsonClass());
 			return jsonData.getJsonClass();
 			
 			
@@ -98,9 +103,10 @@ public class WebsiteFetcher {
 	public static String getContent(String url, boolean cache) {
 		WebsiteFetcher data;
 		try {
-		if(cache && webChache.containsKey(url)) {
-			 data = gson.fromJson(webChache.get(url), WebsiteFetcher.class);
-			
+		final String cached = cache ? webChache.get(url) : null;
+		if(cached != null) {
+			 data = gson.fromJson(cached, WebsiteFetcher.class);
+
 		}else{
 		
 				HttpURLConnection connection = (HttpURLConnection) new URL(url).openConnection();

@@ -1,8 +1,8 @@
 package com.meteordevelopments.duels.listeners;
 
 import com.meteordevelopments.duels.DuelsPlugin;
-import org.bukkit.Bukkit;
 import org.bukkit.Material;
+import org.bukkit.NamespacedKey;
 import org.bukkit.World;
 import org.bukkit.entity.EnderCrystal;
 import org.bukkit.entity.minecart.ExplosiveMinecart;
@@ -12,11 +12,13 @@ import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.entity.EntitySpawnEvent;
 import org.bukkit.event.entity.EntityExplodeEvent;
+import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.event.vehicle.VehicleCreateEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.inventory.EquipmentSlot;
 import org.bukkit.inventory.ItemStack;
-import org.bukkit.metadata.FixedMetadataValue;
+import org.bukkit.persistence.PersistentDataHolder;
+import org.bukkit.persistence.PersistentDataType;
 
 import java.util.Map;
 import java.util.UUID;
@@ -27,18 +29,18 @@ import java.util.concurrent.ConcurrentHashMap;
  */
 public class ExplosionOwnershipListener implements Listener {
 
-    private static final String OWNER_META = "Duels-Owner";
-    private final DuelsPlugin plugin;
+    // Stored in the entity's PersistentDataContainer rather than Bukkit metadata, which is never cleared when the entity is removed
+    private static final NamespacedKey OWNER_KEY = new NamespacedKey(DuelsPlugin.getInstance(), "explosion_owner");
     private final Map<UUID, Long> recentCrystalUse = new ConcurrentHashMap<>();
     private final Map<UUID, Long> recentTntMinecartUse = new ConcurrentHashMap<>();
-    private final Map<World, UUID> recentBlockExplosionTrigger = new ConcurrentHashMap<>();
-    private final Map<World, Long> recentBlockExplosionTime = new ConcurrentHashMap<>();
-    private final Map<World, UUID> recentMinecartExplosionOwner = new ConcurrentHashMap<>();
-    private final Map<World, Long> recentMinecartExplosionTime = new ConcurrentHashMap<>();
+    // Keyed by world UID so unloaded worlds are not kept in memory
+    private final Map<UUID, UUID> recentBlockExplosionTrigger = new ConcurrentHashMap<>();
+    private final Map<UUID, Long> recentBlockExplosionTime = new ConcurrentHashMap<>();
+    private final Map<UUID, UUID> recentMinecartExplosionOwner = new ConcurrentHashMap<>();
+    private final Map<UUID, Long> recentMinecartExplosionTime = new ConcurrentHashMap<>();
 
     public ExplosionOwnershipListener(final DuelsPlugin plugin) {
-        this.plugin = plugin;
-        Bukkit.getPluginManager().registerEvents(this, plugin);
+        plugin.registerPreListener(this);
     }
 
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
@@ -62,10 +64,17 @@ public class ExplosionOwnershipListener implements Listener {
         if (event.getClickedBlock() != null) {
             Material type = event.getClickedBlock().getType();
             if (type == Material.RESPAWN_ANCHOR || type.name().endsWith("_BED")) {
-                recentBlockExplosionTrigger.put(player.getWorld(), player.getUniqueId());
-                recentBlockExplosionTime.put(player.getWorld(), System.currentTimeMillis());
+                recentBlockExplosionTrigger.put(player.getWorld().getUID(), player.getUniqueId());
+                recentBlockExplosionTime.put(player.getWorld().getUID(), System.currentTimeMillis());
             }
         }
+    }
+
+    @EventHandler
+    public void onQuit(final PlayerQuitEvent event) {
+        final UUID uuid = event.getPlayer().getUniqueId();
+        recentCrystalUse.remove(uuid);
+        recentTntMinecartUse.remove(uuid);
     }
 
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
@@ -75,7 +84,7 @@ public class ExplosionOwnershipListener implements Listener {
             if (event.getEntity() instanceof ExplosiveMinecart minecart) {
                 Player owner = findRecentUser(minecart.getWorld(), recentTntMinecartUse);
                 if (owner != null) {
-                    minecart.setMetadata(OWNER_META, new FixedMetadataValue(plugin, owner.getUniqueId().toString()));
+                    setOwner(minecart, owner.getUniqueId());
                 }
             }
             return;
@@ -83,7 +92,7 @@ public class ExplosionOwnershipListener implements Listener {
         // Find a player who very recently used an end crystal
         Player owner = findRecentUser(crystal.getWorld(), recentCrystalUse);
         if (owner != null) {
-            crystal.setMetadata(OWNER_META, new FixedMetadataValue(plugin, owner.getUniqueId().toString()));
+            setOwner(crystal, owner.getUniqueId());
         }
     }
 
@@ -93,7 +102,7 @@ public class ExplosionOwnershipListener implements Listener {
         if (event.getVehicle() instanceof ExplosiveMinecart minecart) {
             Player owner = findRecentUser(minecart.getWorld(), recentTntMinecartUse);
             if (owner != null) {
-                minecart.setMetadata(OWNER_META, new FixedMetadataValue(plugin, owner.getUniqueId().toString()));
+                setOwner(minecart, owner.getUniqueId());
             }
         }
     }
@@ -115,9 +124,9 @@ public class ExplosionOwnershipListener implements Listener {
         }
         
         if (ownerUuid != null) {
-            World world = minecart.getWorld();
-            recentMinecartExplosionOwner.put(world, ownerUuid);
-            recentMinecartExplosionTime.put(world, System.currentTimeMillis());
+            UUID worldId = minecart.getWorld().getUID();
+            recentMinecartExplosionOwner.put(worldId, ownerUuid);
+            recentMinecartExplosionTime.put(worldId, System.currentTimeMillis());
         }
     }
 
@@ -132,45 +141,46 @@ public class ExplosionOwnershipListener implements Listener {
         return null;
     }
 
-    public static UUID getCrystalOwner(final EnderCrystal crystal) {
-        if (crystal.hasMetadata(OWNER_META)) {
+    private static void setOwner(final PersistentDataHolder entity, final UUID owner) {
+        entity.getPersistentDataContainer().set(OWNER_KEY, PersistentDataType.STRING, owner.toString());
+    }
+
+    private static UUID getOwner(final PersistentDataHolder entity) {
+        final String uuidStr = entity.getPersistentDataContainer().get(OWNER_KEY, PersistentDataType.STRING);
+        if (uuidStr != null) {
             try {
-                String uuidStr = crystal.getMetadata(OWNER_META).get(0).asString();
                 return UUID.fromString(uuidStr);
             } catch (Exception ignored) {
             }
         }
         return null;
+    }
+
+    public static UUID getCrystalOwner(final EnderCrystal crystal) {
+        return getOwner(crystal);
     }
 
     public static UUID getTntMinecartOwner(final ExplosiveMinecart minecart) {
-        if (minecart.hasMetadata(OWNER_META)) {
-            try {
-                String uuidStr = minecart.getMetadata(OWNER_META).get(0).asString();
-                return UUID.fromString(uuidStr);
-            } catch (Exception ignored) {
-            }
-        }
-        return null;
+        return getOwner(minecart);
     }
 
     public static UUID getRecentBlockExplosionTrigger(final World world) {
-        return world == null ? null : INSTANCE.recentBlockExplosionTrigger.get(world);
+        return world == null ? null : INSTANCE.recentBlockExplosionTrigger.get(world.getUID());
     }
 
     public static boolean isRecentBlockExplosionInWorld(final World world, long windowMs) {
         if (world == null) return false;
-        Long time = INSTANCE.recentBlockExplosionTime.get(world);
+        Long time = INSTANCE.recentBlockExplosionTime.get(world.getUID());
         return time != null && (System.currentTimeMillis() - time) <= windowMs;
     }
 
     public static UUID getRecentMinecartExplosionOwner(final World world) {
-        return world == null ? null : INSTANCE.recentMinecartExplosionOwner.get(world);
+        return world == null ? null : INSTANCE.recentMinecartExplosionOwner.get(world.getUID());
     }
 
     public static boolean isRecentMinecartExplosionInWorld(final World world, long windowMs) {
         if (world == null) return false;
-        Long time = INSTANCE.recentMinecartExplosionTime.get(world);
+        Long time = INSTANCE.recentMinecartExplosionTime.get(world.getUID());
         return time != null && (System.currentTimeMillis() - time) <= windowMs;
     }
 

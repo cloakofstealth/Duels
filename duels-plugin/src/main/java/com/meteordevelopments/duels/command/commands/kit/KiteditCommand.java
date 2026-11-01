@@ -116,7 +116,7 @@ public class KiteditCommand extends BaseCommand {
         
         // Create and open GUI
         KitEditGui gui = new KitEditGui(plugin, kitImpls);
-        plugin.getGuiListener().addGui(player, gui);
+        plugin.getGuiListener().addGui(player, gui, true);
         gui.open(player);
     }
     

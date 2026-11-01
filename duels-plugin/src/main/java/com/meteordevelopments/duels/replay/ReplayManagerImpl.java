@@ -109,6 +109,10 @@ public class ReplayManagerImpl implements ReplayManager, Loadable, Reloadable, L
         activeDuelRecordings.clear();
         ReplayHelper.replaySessions.clear();
 
+        if (storage != null) {
+            storage.shutdown();
+        }
+
         if (replayListener != null) {
             replayListener.unregister();
         }

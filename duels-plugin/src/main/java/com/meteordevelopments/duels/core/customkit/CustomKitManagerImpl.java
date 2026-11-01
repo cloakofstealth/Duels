@@ -16,13 +16,16 @@ import com.meteordevelopments.duels.util.Log;
 import lombok.Getter;
 import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
+import org.bukkit.event.EventHandler;
+import org.bukkit.event.Listener;
+import org.bukkit.event.player.PlayerQuitEvent;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
-public class CustomKitManagerImpl implements Loadable, CustomKitManager {
+public class CustomKitManagerImpl implements Loadable, CustomKitManager, Listener {
 
     private final DuelsPlugin plugin;
     @Getter
@@ -39,6 +42,7 @@ public class CustomKitManagerImpl implements Loadable, CustomKitManager {
         this.plugin = plugin;
         this.storage = new CustomKitStorage(plugin);
         this.validator = new CustomKitValidator(plugin);
+        Bukkit.getPluginManager().registerEvents(this, plugin);
     }
 
     @Override
@@ -280,6 +284,12 @@ public class CustomKitManagerImpl implements Loadable, CustomKitManager {
 
     public void endSession(final Player player) {
         activeSessions.remove(player.getUniqueId());
+    }
+
+    // Sessions are never resumed, so drop any left open when the editor was closed without saving or discarding
+    @EventHandler
+    public void on(final PlayerQuitEvent event) {
+        endSession(event.getPlayer());
     }
 
     public void discardSession(final Player player) {

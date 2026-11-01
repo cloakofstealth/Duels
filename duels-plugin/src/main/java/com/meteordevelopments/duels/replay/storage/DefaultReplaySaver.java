@@ -241,4 +241,9 @@ public class DefaultReplaySaver implements IReplaySaver {
     public Map<String, DuelReplayMetadata> getMetadataCache() {
         return metadataCache;
     }
+
+    // A new saver (and pool) is created on every reload, so let the old pool's threads finish and exit
+    public void shutdown() {
+        pool.shutdown();
+    }
 }

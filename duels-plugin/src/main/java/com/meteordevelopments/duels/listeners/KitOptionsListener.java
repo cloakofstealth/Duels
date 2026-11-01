@@ -14,7 +14,6 @@ import com.meteordevelopments.duels.util.PlayerUtil;
 import com.meteordevelopments.duels.util.compat.CompatUtil;
 import com.meteordevelopments.duels.util.compat.Items;
 import com.meteordevelopments.duels.util.metadata.MetadataUtil;
-import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.block.Block;
@@ -53,8 +52,8 @@ public class KitOptionsListener implements Listener {
         this.arenaManager = plugin.getArenaManager();
         this.duelManager = plugin.getDuelManager();
 
-        Bukkit.getPluginManager().registerEvents(this, plugin);
-        Bukkit.getPluginManager().registerEvents(CompatUtil.isPre1_14() ? new ComboPre1_14Listener() : new ComboPost1_14Listener(), plugin);
+        plugin.registerPreListener(this);
+        plugin.registerPreListener(CompatUtil.isPre1_14() ? new ComboPre1_14Listener() : new ComboPost1_14Listener());
     }
 
     private boolean isEnabled(final ArenaImpl arena, final Characteristic characteristic) {

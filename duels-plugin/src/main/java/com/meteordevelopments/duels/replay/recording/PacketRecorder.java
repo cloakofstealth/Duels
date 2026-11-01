@@ -72,11 +72,12 @@ public class PacketRecorder extends AbstractListener {
 	public void register() {
 		super.register();
 		
-		if (VersionUtil.isBelow(VersionEnum.V1_18)) {
+		// RECORDED_PACKETS is static, so only add these once instead of on every recording
+		if (VersionUtil.isBelow(VersionEnum.V1_18) && !RECORDED_PACKETS.contains(PacketType.Play.Server.SPAWN_ENTITY_LIVING)) {
 			RECORDED_PACKETS.add(PacketType.Play.Server.SPAWN_ENTITY_LIVING);
 		}
 
-		if (VersionUtil.isAbove(VersionEnum.V1_21)) {
+		if (VersionUtil.isAbove(VersionEnum.V1_21) && !RECORDED_PACKETS.contains(WrapperPlayServerEntityTeleport.TYPE)) {
 			RECORDED_PACKETS.add(WrapperPlayServerEntityTeleport.TYPE);
 		}
 		

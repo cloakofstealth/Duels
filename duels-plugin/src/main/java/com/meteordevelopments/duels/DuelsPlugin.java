@@ -80,6 +80,7 @@ public class DuelsPlugin extends JavaPlugin implements Duels, LogSource {
     private final Map<String, AbstractCommand<DuelsPlugin>> commands = new HashMap<>();
     private final Map<String, String> commandKeyMap = new HashMap<>();
     private final List<Listener> registeredListeners = new ArrayList<>();
+    private final List<Listener> preListeners = new ArrayList<>();
     private int lastLoad;
     @Getter
     private LogManager logManager;
@@ -232,6 +233,9 @@ public class DuelsPlugin extends JavaPlugin implements Duels, LogSource {
             }
         }
 
+        // Unregistered after the loadables so they still handle events fired while running matches are ended
+        preListeners.forEach(HandlerList::unregisterAll);
+        preListeners.clear();
         return true;
     }
 
@@ -488,6 +492,15 @@ public class DuelsPlugin extends JavaPlugin implements Duels, LogSource {
         Bukkit.getPluginManager().registerEvents(listener, this);
 
         sendMessage("&dSuccessfully registered listeners after plugin startup in [" + CC.getTimeDifferenceAndColor(start, System.currentTimeMillis()) + ChatColor.WHITE + "]");
+    }
+
+    /**
+     * Registers a listener created by {@link #loadPreListeners()} so that unload() unregisters it,
+     * since every reload creates new instances of these listeners.
+     */
+    public void registerPreListener(@NotNull final Listener listener) {
+        preListeners.add(listener);
+        Bukkit.getPluginManager().registerEvents(listener, this);
     }
 
     @Override

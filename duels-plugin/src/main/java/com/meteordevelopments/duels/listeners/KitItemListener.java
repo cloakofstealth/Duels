@@ -7,7 +7,6 @@ import com.meteordevelopments.duels.core.kit.edit.KitEditManager;
 import com.meteordevelopments.duels.util.Log;
 import com.meteordevelopments.duels.util.StringUtil;
 import com.meteordevelopments.duels.util.compat.Identifiers;
-import org.bukkit.Bukkit;
 import org.bukkit.Material;
 import org.bukkit.entity.Item;
 import org.bukkit.entity.Player;
@@ -41,7 +40,7 @@ public class KitItemListener implements Listener {
 
         // Only register listener if enabled in config.yml
         if (plugin.getConfiguration().isProtectKitItems()) {
-            Bukkit.getPluginManager().registerEvents(this, plugin);
+            plugin.registerPreListener(this);
         }
     }
 
